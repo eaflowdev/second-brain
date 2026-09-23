@@ -27,24 +27,6 @@ frontend/        # interface web React
 notes_sample/    # notes de test pour l'ingestion
 ```
 
-## Avancement
-
-Le projet est construit étape par étape, un commit par étape :
-
-- [x] Étape 0 — Cadrage & setup
-- [x] Étape 1 — Ingestion des notes (Markdown + PDF)
-- [ ] Étape 2 — Chunking + Embeddings
-- [ ] Étape 3 — Vector store & RAG basique
-- [ ] Étape 4 — Agent loop + Tool use
-- [ ] Étape 5 — Sous-agents spécialisés (quiz, recherche web, synthèse)
-- [ ] Étape 6 — Skills modulaires
-- [ ] Étape 7 — Serveur MCP (Claude Desktop)
-- [ ] Étape 8 — Frontend React
-- [ ] Étape 9 — Gestion de la fenêtre de contexte
-- [ ] Étape 10 — System prompt design + thinking tokens
-- [ ] Étape 11 — Prompt caching
-- [ ] Étape 12 — Prompt injection : détection & défense
-
 ## Lancer le backend
 
 ```bash

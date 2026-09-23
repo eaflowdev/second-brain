@@ -5,3 +5,4 @@ python-multipart
 pypdf
 fastembed
 numpy
+httpx

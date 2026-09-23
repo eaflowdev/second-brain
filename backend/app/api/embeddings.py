@@ -4,12 +4,12 @@ from app.core.config import settings
 from app.embeddings.embedder import Embedder
 from app.embeddings.models import chunk_document
 from app.ingestion.service import scan_notes_dir
-from app.storage.vector_store import VectorStore
+from app.storage.vector_store import get_vector_store
 
 router = APIRouter(prefix="/embeddings", tags=["embeddings"])
 
 _embedder = Embedder()
-_store = VectorStore(settings.data_dir / "vector_store.json")
+_store = get_vector_store()
 
 
 @router.post("/index")
