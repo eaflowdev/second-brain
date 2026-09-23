@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 
-from app.api import ingestion
+from app.api import embeddings, ingestion
 from app.core.config import settings
 
 app = FastAPI(title=settings.app_name)
 app.include_router(ingestion.router)
+app.include_router(embeddings.router)
 
 
 @app.get("/health")
