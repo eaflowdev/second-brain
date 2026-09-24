@@ -8,10 +8,18 @@ own model does the planning/tool-selection — our OpenRouter-based agent loop
 blocks, for standalone/API use without Claude Desktop.
 """
 
-from mcp.server.fastmcp import FastMCP
+import sys
+from pathlib import Path
 
-from app.agents.subagents import QUIZZER, RESEARCHER, SYNTHESIZER
-from app.agents.tools import _search_notes, _search_web
+# Claude Desktop spawns this script directly (`python .../server.py`), which
+# only puts the script's own directory on sys.path — not backend/. Add it
+# explicitly so `import app...` works regardless of the caller's cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+
+from app.agents.subagents import QUIZZER, RESEARCHER, SYNTHESIZER  # noqa: E402
+from app.agents.tools import _search_notes, _search_web  # noqa: E402
 
 mcp = FastMCP("second-brain")
 
