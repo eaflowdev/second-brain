@@ -29,9 +29,11 @@ notes_sample/    # notes de test pour l'ingestion
 
 ## Lancer le backend
 
+Nécessite Python 3.10+ (SDK MCP).
+
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python3.13 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
@@ -42,3 +44,22 @@ Tests :
 cd backend
 pytest tests -q
 ```
+
+## Serveur MCP (Claude Desktop)
+
+Expose les notes personnelles (recherche, quiz, recherche web, synthèse) comme outils MCP, utilisables directement depuis Claude Desktop.
+
+Dans la config de Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) :
+
+```json
+{
+  "mcpServers": {
+    "second-brain": {
+      "command": "/chemin/absolu/vers/backend/.venv/bin/python",
+      "args": ["/chemin/absolu/vers/backend/app/mcp/server.py"]
+    }
+  }
+}
+```
+
+Redémarrer Claude Desktop ensuite. Les clés (`OPENROUTER_API_KEY`, `TAVILY_API_KEY`) sont lues depuis `backend/.env` (chemin absolu, indépendant du répertoire de travail utilisé par Claude Desktop pour lancer le process).

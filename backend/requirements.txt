@@ -6,3 +6,4 @@ pypdf
 fastembed
 numpy
 httpx
+mcp<2

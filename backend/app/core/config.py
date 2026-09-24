@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     tavily_api_key: Optional[str] = None
 
     class Config:
-        env_file = ".env"
+        # Chemin absolu : un serveur MCP est lancé par Claude Desktop avec un cwd
+        # imprévisible, un chemin relatif ".env" ne serait pas trouvé de manière fiable.
+        env_file = Path(__file__).resolve().parents[2] / ".env"
 
 
 settings = Settings()
