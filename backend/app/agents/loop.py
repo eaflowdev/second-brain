@@ -2,9 +2,10 @@ import json
 
 from app.agents.tools import TOOLS
 from app.core.config import settings
-from app.core.llm import chat
+from app.core.llm import LLMError, chat
 
 MAX_TURNS = 5
+CHAT_RETRY_ATTEMPTS = 2
 
 SYSTEM_PROMPT = (
     "Tu es l'assistant de révision de Second Brain. Tu as accès à des outils : "
@@ -14,38 +15,95 @@ SYSTEM_PROMPT = (
     "trouves rien de pertinent, dis-le clairement plutôt que d'inventer."
 )
 
+PLANNING_PROMPT_TEMPLATE = (
+    "Question : {question}\n\nOutils disponibles :\n{tool_list}\n\n"
+    "Propose un plan court (2 à 4 étapes maximum) pour répondre à cette "
+    "question à l'aide de ces outils. Ne réponds pas à la question, donne "
+    "uniquement le plan."
+)
+
+
+def _chat_with_retry(messages, tools=None, model=None, attempts=CHAT_RETRY_ATTEMPTS):
+    """The free-tier model pool occasionally returns a transient error
+    (rate-limit, malformed body). Retrying once is enough in practice."""
+    last_error = None
+    for _ in range(attempts):
+        try:
+            return chat(messages, tools=tools, model=model)
+        except LLMError as exc:
+            last_error = exc
+    raise last_error
+
+
+def _plan(question: str) -> str:
+    tool_list = "\n".join(f"- {tool.name}: {tool.description}" for tool in TOOLS.values())
+    prompt = PLANNING_PROMPT_TEMPLATE.format(question=question, tool_list=tool_list)
+    message = _chat_with_retry([{"role": "user", "content": prompt}], model=settings.agent_model)
+    return message.get("content") or ""
+
 
 def run_agent(question: str, max_turns: int = MAX_TURNS) -> dict:
-    """ReAct loop: the model decides to call a tool (action), we run it and feed
-    back the result (observation), until it answers directly or max_turns is hit."""
+    """Plan, then ReAct loop: the model decides to call a tool (action), we run
+    it and feed back the result (observation), until it answers directly, gets
+    stuck repeating itself, or max_turns is hit."""
+    plan = _plan(question)
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
+        {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]
     tool_schemas = [tool.to_schema() for tool in TOOLS.values()]
     steps = []
+    seen_calls = set()
 
     for _ in range(max_turns):
-        message = chat(messages, tools=tool_schemas, model=settings.agent_model)
+        message = _chat_with_retry(messages, tools=tool_schemas, model=settings.agent_model)
         tool_calls = message.get("tool_calls")
 
         if not tool_calls:
-            return {"answer": message["content"], "steps": steps}
+            return {"plan": plan, "answer": message["content"], "steps": steps}
 
         messages.append(message)
         for call in tool_calls:
             name = call["function"]["name"]
             args = json.loads(call["function"]["arguments"] or "{}")
             tool = TOOLS.get(name)
+            call_signature = (name, json.dumps(args, sort_keys=True))
 
-            observation = tool.handler(**args) if tool else f"Outil inconnu : {name}"
+            if call_signature in seen_calls:
+                observation = (
+                    "Tu as déjà appelé cet outil avec exactement les mêmes "
+                    "arguments : le résultat sera identique. Essaie une "
+                    "requête différente, ou réponds avec les informations "
+                    "déjà récoltées."
+                )
+            else:
+                seen_calls.add(call_signature)
+                try:
+                    observation = tool.handler(**args) if tool else f"Outil inconnu : {name}"
+                except Exception as exc:  # noqa: BLE001 - un outil qui plante ne doit pas casser la boucle
+                    observation = f"L'outil a échoué : {exc}"
 
             steps.append({"tool": name, "input": args, "output": observation})
             messages.append(
                 {"role": "tool", "tool_call_id": call["id"], "content": observation}
             )
 
+    # Plafond atteint : on force une synthèse avec ce qui a été récolté plutôt
+    # que d'abandonner sèchement.
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Tu as atteint la limite d'itérations autorisées. Réponds du "
+                "mieux possible avec les informations déjà récoltées ci-dessus."
+            ),
+        }
+    )
+    final_message = _chat_with_retry(messages, model=settings.agent_model)
     return {
-        "answer": "Je n'ai pas réussi à conclure dans le nombre de tours autorisé.",
+        "plan": plan,
+        "answer": final_message.get("content") or "Je n'ai pas réussi à conclure.",
         "steps": steps,
     }
