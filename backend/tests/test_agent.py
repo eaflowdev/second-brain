@@ -18,6 +18,41 @@ def test_search_web_without_key_returns_message_not_crash(monkeypatch):
     assert "TAVILY_API_KEY" in result
 
 
+def test_build_system_message_plain_by_default():
+    message = loop._build_system_message("contenu du system prompt", cache=False)
+
+    assert message == {"role": "system", "content": "contenu du system prompt"}
+
+
+def test_build_system_message_wraps_with_cache_control_when_enabled():
+    message = loop._build_system_message("contenu du system prompt", cache=True)
+
+    assert message["role"] == "system"
+    assert message["content"] == [
+        {"type": "text", "text": "contenu du system prompt", "cache_control": {"type": "ephemeral"}}
+    ]
+
+
+def test_run_agent_collects_usage_per_turn(monkeypatch):
+    def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
+        if tools is None:
+            return {"role": "assistant", "content": "plan", "tool_calls": None}
+        return {
+            "role": "assistant",
+            "content": "réponse",
+            "tool_calls": None,
+            "usage": {"prompt_tokens": 500, "prompt_tokens_details": {"cached_tokens": 400}},
+        }
+
+    monkeypatch.setattr(loop, "chat", fake_chat)
+
+    result = loop.run_agent("une question")
+
+    assert result["usage"] == [
+        {"prompt_tokens": 500, "prompt_tokens_details": {"cached_tokens": 400}}
+    ]
+
+
 def test_run_agent_captures_reasoning_trace_when_present(monkeypatch):
     def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
         if tools is None:

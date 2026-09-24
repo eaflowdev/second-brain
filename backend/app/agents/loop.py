@@ -66,12 +66,27 @@ def _plan(question: str, tools) -> str:
     return message.get("content") or ""
 
 
+def _build_system_message(content: str, cache: bool) -> dict:
+    """Plain string content by default. When `cache=True`, wrap the content as
+    a content-block with a `cache_control` breakpoint — the format Anthropic,
+    Gemini and Alibaba Qwen use on OpenRouter to mark a prefix as reusable.
+    Providers that ignore/ don't support this block format are unaffected: it's
+    additive metadata, not a different prompt."""
+    if not cache:
+        return {"role": "system", "content": content}
+    return {
+        "role": "system",
+        "content": [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}],
+    }
+
+
 def run_agent(
     question: str,
     system_prompt: str = SYSTEM_PROMPT,
     tools=None,
     max_turns: int = MAX_TURNS,
     reasoning: Optional[dict] = None,
+    cache_system_prompt: bool = False,
 ) -> dict:
     """Plan, then ReAct loop: the model decides to call a tool (action), we run
     it and feed back the result (observation), until it answers directly, gets
@@ -85,20 +100,27 @@ def run_agent(
     `reasoning` (e.g. {"effort": "low"|"medium"|"high"}) controls how much the
     model is allowed to "think" before answering, on models that support it.
     Any reasoning trace returned by the model is collected in `thinking`,
-    exposed to the caller instead of being silently discarded."""
+    exposed to the caller instead of being silently discarded.
+
+    `cache_system_prompt` marks the (large, stable) system prompt as a cacheable
+    block via `cache_control` — it never changes within a run, and across a
+    multi-turn loop the same prefix is resent at every single turn, making it
+    the prime candidate for prompt caching."""
     active_tools = list(TOOLS.values()) if tools is None else tools
     tools_by_name = {tool.name: tool for tool in active_tools}
     tool_schemas = [tool.to_schema() for tool in active_tools]
 
     plan = _plan(question, active_tools)
 
+    system_message = _build_system_message(system_prompt, cache=cache_system_prompt)
     messages = [
-        {"role": "system", "content": system_prompt},
+        system_message,
         {"role": "user", "content": question},
         {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]
     steps = []
     thinking = []
+    usage_log = []
     seen_calls = set()
 
     for _ in range(max_turns):
@@ -107,10 +129,17 @@ def run_agent(
         )
         if message.get("reasoning"):
             thinking.append(message["reasoning"])
+        usage_log.append(message.get("usage", {}))
         tool_calls = message.get("tool_calls")
 
         if not tool_calls:
-            return {"plan": plan, "answer": message["content"], "steps": steps, "thinking": thinking}
+            return {
+                "plan": plan,
+                "answer": message["content"],
+                "steps": steps,
+                "thinking": thinking,
+                "usage": usage_log,
+            }
 
         messages.append(message)
         for call in tool_calls:
@@ -152,6 +181,14 @@ def run_agent(
     final_message = _chat_with_retry(messages, model=settings.agent_model, reasoning=reasoning)
     if final_message.get("reasoning"):
         thinking.append(final_message["reasoning"])
+    usage_log.append(final_message.get("usage", {}))
+    return {
+        "plan": plan,
+        "answer": final_message.get("content") or "Je n'ai pas réussi à conclure.",
+        "steps": steps,
+        "thinking": thinking,
+        "usage": usage_log,
+    }
     return {
         "plan": plan,
         "answer": final_message.get("content") or "Je n'ai pas réussi à conclure.",

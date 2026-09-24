@@ -55,7 +55,9 @@ def chat(
         # (rate-limit upstream, provider indisponible...) plutôt qu'un code HTTP.
         raise LLMError(f"Réponse OpenRouter inattendue (pas de 'choices') : {body}")
 
-    return choices[0]["message"]
+    message = choices[0]["message"]
+    message["usage"] = body.get("usage", {})
+    return message
 
 
 def generate(system: str, user_message: str, max_tokens: int = 1024) -> str:
