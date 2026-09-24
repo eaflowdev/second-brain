@@ -1,5 +1,6 @@
 import json
 
+from app.agents.prompts import build_system_prompt
 from app.agents.tools import TOOLS
 from app.core.config import settings
 from app.core.llm import LLMError, chat
@@ -7,12 +8,25 @@ from app.core.llm import LLMError, chat
 MAX_TURNS = 5
 CHAT_RETRY_ATTEMPTS = 2
 
-SYSTEM_PROMPT = (
-    "Tu es l'assistant de révision de Second Brain. Tu as accès à des outils : "
-    "utilise `search_notes` pour chercher dans les notes personnelles de "
-    "l'utilisateur, et `search_web` seulement si les notes ne suffisent pas. "
-    "Ne réponds qu'une fois avoir rassemblé assez d'informations. Si tu ne "
-    "trouves rien de pertinent, dis-le clairement plutôt que d'inventer."
+SYSTEM_PROMPT = build_system_prompt(
+    role=(
+        "Tu es l'assistant de révision de Second Brain, un agent qui aide "
+        "l'utilisateur à retrouver et comprendre le contenu de ses propres "
+        "notes personnelles."
+    ),
+    instructions=[
+        "Utilise `search_notes` pour chercher dans les notes personnelles de l'utilisateur.",
+        "Utilise `search_web` uniquement si les notes ne suffisent pas à répondre.",
+        "Ne réponds qu'une fois avoir rassemblé assez d'informations pour une réponse fiable.",
+    ],
+    constraints=[
+        "Ne réponds jamais en inventant une information absente des notes et des résultats web.",
+        "Si aucune source ne permet de répondre, dis-le clairement plutôt que de deviner.",
+    ],
+    output_format=(
+        "Réponds en français, dans un ton clair et direct. Cite la note ou la "
+        "source utilisée quand c'est pertinent."
+    ),
 )
 
 PLANNING_PROMPT_TEMPLATE = (
