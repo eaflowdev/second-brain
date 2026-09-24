@@ -16,8 +16,12 @@ def chat(
     tools: Optional[list[dict]] = None,
     max_tokens: int = 1024,
     model: Optional[str] = None,
+    reasoning: Optional[dict] = None,
 ) -> dict:
-    """Low-level call: returns the raw assistant message (may contain tool_calls)."""
+    """Low-level call: returns the raw assistant message (may contain tool_calls
+    and, for reasoning-capable models, a "reasoning" field with the model's
+    chain of thought). `reasoning` follows OpenRouter's unified format, e.g.
+    {"effort": "low" | "medium" | "high"} or {"max_tokens": 2000}."""
     if not settings.openrouter_api_key:
         raise LLMError(
             "OPENROUTER_API_KEY manquante : ajoute-la dans backend/.env pour activer la génération."
@@ -30,6 +34,8 @@ def chat(
     }
     if tools:
         payload["tools"] = tools
+    if reasoning:
+        payload["reasoning"] = reasoning
 
     try:
         response = httpx.post(

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -10,19 +12,23 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 class AskRequest(BaseModel):
     question: str
+    # "low" | "medium" | "high" (voir OpenRouter reasoning.effort) - None = comportement par défaut du modèle
+    reasoning_effort: Optional[str] = None
 
 
 @router.post("/ask")
 def ask(request: AskRequest) -> dict:
+    reasoning = {"effort": request.reasoning_effort} if request.reasoning_effort else None
     try:
-        return run_agent(request.question)
+        return run_agent(request.question, reasoning=reasoning)
     except LLMError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/orchestrate")
 def orchestrate(request: AskRequest) -> dict:
+    reasoning = {"effort": request.reasoning_effort} if request.reasoning_effort else None
     try:
-        return run_orchestrator(request.question)
+        return run_orchestrator(request.question, reasoning=reasoning)
     except LLMError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from app.agents.loop import run_agent
 from app.agents.models import Tool
 from app.agents.prompts import build_system_prompt
@@ -47,10 +49,11 @@ def _make_delegation_tool(subagent) -> Tool:
 DELEGATION_TOOLS = [_make_delegation_tool(subagent) for subagent in SUBAGENTS.values()]
 
 
-def run_orchestrator(question: str) -> dict:
+def run_orchestrator(question: str, reasoning: Optional[dict] = None) -> dict:
     return run_agent(
         question,
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
         tools=DELEGATION_TOOLS,
         max_turns=ORCHESTRATOR_MAX_TURNS,
+        reasoning=reasoning,
     )

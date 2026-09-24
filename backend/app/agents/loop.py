@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 from app.agents.prompts import build_system_prompt
 from app.agents.skill_loader import list_skills
@@ -46,13 +47,13 @@ PLANNING_PROMPT_TEMPLATE = (
 )
 
 
-def _chat_with_retry(messages, tools=None, model=None, attempts=CHAT_RETRY_ATTEMPTS):
+def _chat_with_retry(messages, tools=None, model=None, reasoning: Optional[dict] = None, attempts=CHAT_RETRY_ATTEMPTS):
     """The free-tier model pool occasionally returns a transient error
     (rate-limit, malformed body). Retrying once is enough in practice."""
     last_error = None
     for _ in range(attempts):
         try:
-            return chat(messages, tools=tools, model=model)
+            return chat(messages, tools=tools, model=model, reasoning=reasoning)
         except LLMError as exc:
             last_error = exc
     raise last_error
@@ -70,6 +71,7 @@ def run_agent(
     system_prompt: str = SYSTEM_PROMPT,
     tools=None,
     max_turns: int = MAX_TURNS,
+    reasoning: Optional[dict] = None,
 ) -> dict:
     """Plan, then ReAct loop: the model decides to call a tool (action), we run
     it and feed back the result (observation), until it answers directly, gets
@@ -78,7 +80,12 @@ def run_agent(
     system_prompt/tools default to the general assistant, but can be overridden
     to turn this same engine into a narrowly-scoped subagent with its own,
     isolated conversation (a fresh `messages` list every call - nothing is
-    shared with the caller's context)."""
+    shared with the caller's context).
+
+    `reasoning` (e.g. {"effort": "low"|"medium"|"high"}) controls how much the
+    model is allowed to "think" before answering, on models that support it.
+    Any reasoning trace returned by the model is collected in `thinking`,
+    exposed to the caller instead of being silently discarded."""
     active_tools = list(TOOLS.values()) if tools is None else tools
     tools_by_name = {tool.name: tool for tool in active_tools}
     tool_schemas = [tool.to_schema() for tool in active_tools]
@@ -91,14 +98,19 @@ def run_agent(
         {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]
     steps = []
+    thinking = []
     seen_calls = set()
 
     for _ in range(max_turns):
-        message = _chat_with_retry(messages, tools=tool_schemas, model=settings.agent_model)
+        message = _chat_with_retry(
+            messages, tools=tool_schemas, model=settings.agent_model, reasoning=reasoning
+        )
+        if message.get("reasoning"):
+            thinking.append(message["reasoning"])
         tool_calls = message.get("tool_calls")
 
         if not tool_calls:
-            return {"plan": plan, "answer": message["content"], "steps": steps}
+            return {"plan": plan, "answer": message["content"], "steps": steps, "thinking": thinking}
 
         messages.append(message)
         for call in tool_calls:
@@ -137,9 +149,12 @@ def run_agent(
             ),
         }
     )
-    final_message = _chat_with_retry(messages, model=settings.agent_model)
+    final_message = _chat_with_retry(messages, model=settings.agent_model, reasoning=reasoning)
+    if final_message.get("reasoning"):
+        thinking.append(final_message["reasoning"])
     return {
         "plan": plan,
         "answer": final_message.get("content") or "Je n'ai pas réussi à conclure.",
         "steps": steps,
+        "thinking": thinking,
     }

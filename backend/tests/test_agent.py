@@ -18,10 +18,29 @@ def test_search_web_without_key_returns_message_not_crash(monkeypatch):
     assert "TAVILY_API_KEY" in result
 
 
+def test_run_agent_captures_reasoning_trace_when_present(monkeypatch):
+    def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
+        if tools is None:
+            return {"role": "assistant", "content": "plan", "tool_calls": None}
+        return {
+            "role": "assistant",
+            "content": "réponse directe",
+            "tool_calls": None,
+            "reasoning": "Je réfléchis avant de répondre : la note dit X donc Y.",
+        }
+
+    monkeypatch.setattr(loop, "chat", fake_chat)
+
+    result = loop.run_agent("une question", reasoning={"effort": "low"})
+
+    assert result["thinking"] == ["Je réfléchis avant de répondre : la note dit X donc Y."]
+    assert result["answer"] == "réponse directe"
+
+
 def test_run_agent_executes_tool_then_returns_final_answer(monkeypatch):
     calls = []
 
-    def fake_chat(messages, tools=None, max_tokens=1024, model=None):
+    def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
         if tools is None:
             return {"role": "assistant", "content": "1. Chercher dans les notes", "tool_calls": None}
         if len(calls) == 0:
@@ -57,7 +76,7 @@ def test_run_agent_executes_tool_then_returns_final_answer(monkeypatch):
 
 
 def test_run_agent_stops_after_max_turns(monkeypatch):
-    def always_calls_tool(messages, tools=None, max_tokens=1024, model=None):
+    def always_calls_tool(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
         return {
             "role": "assistant",
             "content": None,
@@ -78,7 +97,7 @@ def test_run_agent_stops_after_max_turns(monkeypatch):
 def test_run_agent_detects_repeated_identical_tool_call(monkeypatch):
     handler_calls = []
 
-    def always_repeats_same_call(messages, tools=None, max_tokens=1024, model=None):
+    def always_repeats_same_call(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
         if tools is None:
             return {"role": "assistant", "content": "plan", "tool_calls": None}
         return {
@@ -107,7 +126,7 @@ def test_run_agent_detects_repeated_identical_tool_call(monkeypatch):
 def test_chat_with_retry_recovers_from_one_transient_failure(monkeypatch):
     attempts = []
 
-    def flaky_chat(messages, tools=None, model=None):
+    def flaky_chat(messages, tools=None, model=None, reasoning=None):
         attempts.append(1)
         if len(attempts) == 1:
             raise LLMError("erreur transitoire")

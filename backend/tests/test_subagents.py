@@ -4,7 +4,7 @@ from app.agents import orchestrator, subagents
 def test_subagent_run_isolates_context_and_returns_only_answer(monkeypatch):
     captured = {}
 
-    def fake_run_agent(task, system_prompt=None, tools=None, max_turns=None):
+    def fake_run_agent(task, system_prompt=None, tools=None, max_turns=None, reasoning=None):
         captured["task"] = task
         captured["system_prompt"] = system_prompt
         captured["tools"] = tools
@@ -43,7 +43,7 @@ def test_delegation_tool_handler_calls_the_right_subagent(monkeypatch):
 def test_run_orchestrator_uses_delegation_tools(monkeypatch):
     captured = {}
 
-    def fake_run_agent(question, system_prompt=None, tools=None, max_turns=None):
+    def fake_run_agent(question, system_prompt=None, tools=None, max_turns=None, reasoning=None):
         captured["system_prompt"] = system_prompt
         captured["tools"] = tools
         return {"plan": "", "answer": "ok", "steps": []}
