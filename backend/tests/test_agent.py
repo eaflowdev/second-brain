@@ -53,6 +53,34 @@ def test_run_agent_collects_usage_per_turn(monkeypatch):
     ]
 
 
+def test_run_agent_stream_yields_plan_tool_and_final_answer_events(monkeypatch):
+    calls = []
+
+    def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
+        if tools is None:
+            return {"role": "assistant", "content": "1. Chercher dans les notes", "tool_calls": None}
+        if len(calls) == 0:
+            calls.append(1)
+            return {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_1", "function": {"name": "search_notes", "arguments": '{"query": "x"}'}}
+                ],
+            }
+        return {"role": "assistant", "content": "réponse finale", "tool_calls": None}
+
+    monkeypatch.setattr(loop, "chat", fake_chat)
+    monkeypatch.setattr(loop.TOOLS["search_notes"], "handler", lambda query: "observation brute")
+
+    events = list(loop.run_agent_stream("une question"))
+
+    assert events[0] == {"type": "plan", "content": "1. Chercher dans les notes"}
+    assert {"type": "tool_call", "tool": "search_notes", "input": {"query": "x"}} in events
+    assert {"type": "tool_result", "tool": "search_notes", "output": "observation brute"} in events
+    assert events[-1] == {"type": "final_answer", "content": "réponse finale"}
+
+
 def test_run_agent_captures_reasoning_trace_when_present(monkeypatch):
     def fake_chat(messages, tools=None, max_tokens=1024, model=None, reasoning=None):
         if tools is None:

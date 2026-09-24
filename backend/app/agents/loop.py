@@ -200,9 +200,90 @@ def run_agent(
         "thinking": thinking,
         "usage": usage_log,
     }
-    return {
-        "plan": plan,
-        "answer": final_message.get("content") or "Je n'ai pas réussi à conclure.",
-        "steps": steps,
-        "thinking": thinking,
+
+
+def run_agent_stream(
+    question: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    tools=None,
+    max_turns: int = MAX_TURNS,
+    reasoning: Optional[dict] = None,
+    cache_system_prompt: bool = False,
+):
+    """Same engine as run_agent, but yields one event per step as it happens
+    (plan, tool_call, tool_result, thinking, final_answer) instead of building
+    a single dict at the end — for a UI that wants to show live progress
+    rather than a blank spinner during a multi-turn tool-use loop."""
+    active_tools = list(TOOLS.values()) if tools is None else tools
+    tools_by_name = {tool.name: tool for tool in active_tools}
+    tool_schemas = [tool.to_schema() for tool in active_tools]
+
+    plan = _plan(question, active_tools)
+    yield {"type": "plan", "content": plan}
+
+    system_message = _build_system_message(system_prompt, cache=cache_system_prompt)
+    messages = [
+        system_message,
+        {"role": "user", "content": question},
+        {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
+    ]
+    seen_calls = set()
+
+    for _ in range(max_turns):
+        message = _chat_with_retry(
+            messages, tools=tool_schemas, model=settings.agent_model, reasoning=reasoning
+        )
+        if message.get("reasoning"):
+            yield {"type": "thinking", "content": message["reasoning"]}
+        tool_calls = message.get("tool_calls")
+
+        if not tool_calls:
+            yield {"type": "final_answer", "content": message["content"]}
+            return
+
+        messages.append(message)
+        for call in tool_calls:
+            name = call["function"]["name"]
+            args = json.loads(call["function"]["arguments"] or "{}")
+            tool = tools_by_name.get(name)
+            call_signature = (name, json.dumps(args, sort_keys=True))
+            yield {"type": "tool_call", "tool": name, "input": args}
+
+            if call_signature in seen_calls:
+                observation = (
+                    "Tu as déjà appelé cet outil avec exactement les mêmes "
+                    "arguments : le résultat sera identique. Essaie une "
+                    "requête différente, ou réponds avec les informations "
+                    "déjà récoltées."
+                )
+                llm_content = observation
+            else:
+                seen_calls.add(call_signature)
+                try:
+                    observation = tool.handler(**args) if tool else f"Outil inconnu : {name}"
+                    llm_content = wrap_untrusted(observation, source=name)
+                except Exception as exc:  # noqa: BLE001 - un outil qui plante ne doit pas casser la boucle
+                    observation = f"L'outil a échoué : {exc}"
+                    llm_content = observation
+
+            yield {"type": "tool_result", "tool": name, "output": observation}
+            messages.append(
+                {"role": "tool", "tool_call_id": call["id"], "content": llm_content}
+            )
+
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Tu as atteint la limite d'itérations autorisées. Réponds du "
+                "mieux possible avec les informations déjà récoltées ci-dessus."
+            ),
+        }
+    )
+    final_message = _chat_with_retry(messages, model=settings.agent_model, reasoning=reasoning)
+    if final_message.get("reasoning"):
+        yield {"type": "thinking", "content": final_message["reasoning"]}
+    yield {
+        "type": "final_answer",
+        "content": final_message.get("content") or "Je n'ai pas réussi à conclure.",
     }
