@@ -1,12 +1,20 @@
 import json
 
 from app.agents.prompts import build_system_prompt
+from app.agents.skill_loader import list_skills
 from app.agents.tools import TOOLS
 from app.core.config import settings
 from app.core.llm import LLMError, chat
 
 MAX_TURNS = 5
 CHAT_RETRY_ATTEMPTS = 2
+
+
+def _skills_index() -> str:
+    """Lightweight index (name + one-line description) always in context — the
+    full instructions of a skill are only loaded on demand via `load_skill`."""
+    return "\n".join(f"- {skill.name}: {skill.description}" for skill in list_skills())
+
 
 SYSTEM_PROMPT = build_system_prompt(
     role=(
@@ -17,6 +25,7 @@ SYSTEM_PROMPT = build_system_prompt(
     instructions=[
         "Utilise `search_notes` pour chercher dans les notes personnelles de l'utilisateur.",
         "Utilise `search_web` uniquement si les notes ne suffisent pas à répondre.",
+        "Utilise `load_skill` dès que la tâche correspond à l'une des compétences ci-dessous, puis suis ses instructions.",
         "Ne réponds qu'une fois avoir rassemblé assez d'informations pour une réponse fiable.",
     ],
     constraints=[
@@ -27,7 +36,7 @@ SYSTEM_PROMPT = build_system_prompt(
         "Réponds en français, dans un ton clair et direct. Cite la note ou la "
         "source utilisée quand c'est pertinent."
     ),
-)
+) + f"\n\n<skills>\n{_skills_index()}\n</skills>"
 
 PLANNING_PROMPT_TEMPLATE = (
     "Question : {question}\n\nOutils disponibles :\n{tool_list}\n\n"

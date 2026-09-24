@@ -1,6 +1,7 @@
 import httpx
 
 from app.agents.models import Tool
+from app.agents.skill_loader import get_skill, list_skills
 from app.core.config import settings
 from app.embeddings.embedder import Embedder
 from app.storage.vector_store import get_vector_store
@@ -46,6 +47,15 @@ def _search_web(query: str) -> str:
     )
 
 
+def _load_skill(name: str) -> str:
+    try:
+        skill = get_skill(name)
+    except KeyError:
+        available = ", ".join(s.name for s in list_skills())
+        return f"Compétence inconnue : {name}. Compétences disponibles : {available}."
+    return skill.body
+
+
 search_notes_tool = Tool(
     name="search_notes",
     description=(
@@ -74,4 +84,19 @@ search_web_tool = Tool(
     handler=_search_web,
 )
 
-TOOLS = {tool.name: tool for tool in [search_notes_tool, search_web_tool]}
+load_skill_tool = Tool(
+    name="load_skill",
+    description=(
+        "Charge les instructions détaillées d'une compétence (skill) disponible. "
+        "Appelle cet outil dès que la tâche demandée correspond à l'une des "
+        "compétences listées dans le system prompt, puis suis ses instructions."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {"name": {"type": "string", "description": "Le nom de la compétence à charger"}},
+        "required": ["name"],
+    },
+    handler=_load_skill,
+)
+
+TOOLS = {tool.name: tool for tool in [search_notes_tool, search_web_tool, load_skill_tool]}
