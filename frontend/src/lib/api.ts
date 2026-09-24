@@ -8,6 +8,11 @@ export type AgentEvent =
   | { type: "final_answer"; content: string }
   | { type: "error"; message: string };
 
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface NoteDocument {
   id: string;
   title: string;
@@ -24,9 +29,13 @@ export interface NoteDocument {
 export function streamAsk(
   question: string,
   onEvent: (event: AgentEvent) => void,
-  options?: { reasoningEffort?: string },
+  options?: { reasoningEffort?: string; history?: HistoryTurn[] },
 ): () => void {
   const params = new URLSearchParams({ question });
+  if (options?.history?.length) {
+    // EventSource = GET uniquement : l'historique passe en JSON dans l'URL.
+    params.set("history", JSON.stringify(options.history));
+  }
   if (options?.reasoningEffort) {
     params.set("reasoning_effort", options.reasoningEffort);
   }

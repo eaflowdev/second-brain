@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 
+from app.agents.context_window import build_context
 from app.agents.prompts import build_system_prompt
 from app.agents.skill_loader import list_skills
 from app.agents.tools import TOOLS
@@ -10,6 +11,7 @@ from app.security.prompt_injection import wrap_untrusted
 
 MAX_TURNS = 5
 CHAT_RETRY_ATTEMPTS = 2
+HISTORY_TOKEN_BUDGET = 2000
 
 
 def _skills_index() -> str:
@@ -85,6 +87,17 @@ def _build_system_message(content: str, cache: bool) -> dict:
     }
 
 
+def _build_history_messages(
+    history: Optional[list[dict]], summarize: bool = False
+) -> list[dict]:
+    """Turn a compacted [{role, content}, ...] history into chat messages, so
+    previous turns are visible to the model without re-running their tool calls."""
+    if not history:
+        return []
+    compacted = build_context(history, max_tokens=HISTORY_TOKEN_BUDGET, summarize=summarize)
+    return [{"role": turn["role"], "content": turn["content"]} for turn in compacted]
+
+
 def run_agent(
     question: str,
     system_prompt: str = SYSTEM_PROMPT,
@@ -92,6 +105,8 @@ def run_agent(
     max_turns: int = MAX_TURNS,
     reasoning: Optional[dict] = None,
     cache_system_prompt: bool = False,
+    history: Optional[list[dict]] = None,
+    summarize_history: bool = False,
 ) -> dict:
     """Plan, then ReAct loop: the model decides to call a tool (action), we run
     it and feed back the result (observation), until it answers directly, gets
@@ -110,7 +125,12 @@ def run_agent(
     `cache_system_prompt` marks the (large, stable) system prompt as a cacheable
     block via `cache_control` — it never changes within a run, and across a
     multi-turn loop the same prefix is resent at every single turn, making it
-    the prime candidate for prompt caching."""
+    the prime candidate for prompt caching.
+
+    `history` is prior [{role, content}, ...] turns (question + final answer
+    only, no internal tool trace) from earlier calls in the same conversation.
+    It's compacted (sliding window) to a fixed token budget before being
+    injected, so a long-running chat never grows the context unboundedly."""
     active_tools = list(TOOLS.values()) if tools is None else tools
     tools_by_name = {tool.name: tool for tool in active_tools}
     tool_schemas = [tool.to_schema() for tool in active_tools]
@@ -120,6 +140,7 @@ def run_agent(
     system_message = _build_system_message(system_prompt, cache=cache_system_prompt)
     messages = [
         system_message,
+        *_build_history_messages(history, summarize_history),
         {"role": "user", "content": question},
         {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]
@@ -209,6 +230,8 @@ def run_agent_stream(
     max_turns: int = MAX_TURNS,
     reasoning: Optional[dict] = None,
     cache_system_prompt: bool = False,
+    history: Optional[list[dict]] = None,
+    summarize_history: bool = False,
 ):
     """Same engine as run_agent, but yields one event per step as it happens
     (plan, tool_call, tool_result, thinking, final_answer) instead of building
@@ -224,6 +247,7 @@ def run_agent_stream(
     system_message = _build_system_message(system_prompt, cache=cache_system_prompt)
     messages = [
         system_message,
+        *_build_history_messages(history, summarize_history),
         {"role": "user", "content": question},
         {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]

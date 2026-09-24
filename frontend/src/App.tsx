@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { streamAsk } from "./lib/api";
+import { streamAsk, type HistoryTurn } from "./lib/api";
 import { applyEvent, createAssistantMessage, type ChatMessage } from "./lib/chat";
 import { ChatBubble } from "./components/ChatBubble";
 import { ChatInput } from "./components/ChatInput";
@@ -21,17 +21,26 @@ export default function App() {
     };
     const assistantId = crypto.randomUUID();
 
+    // Seuls les tours terminés (question + réponse finale) alimentent la mémoire.
+    const history: HistoryTurn[] = messages
+      .filter((m) => m.status === "done" && m.content)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setMessages((prev) => [...prev, userMessage, createAssistantMessage(assistantId)]);
     setStreaming(true);
 
-    closeRef.current = streamAsk(question, (event) => {
+    closeRef.current = streamAsk(
+      question,
+      (event) => {
       setMessages((prev) =>
         prev.map((message) => (message.id === assistantId ? applyEvent(message, event) : message)),
       );
       if (event.type === "final_answer" || event.type === "error") {
         setStreaming(false);
       }
-    });
+      },
+      { history },
+    );
   }
 
   return (
