@@ -63,3 +63,15 @@ Dans la config de Claude Desktop (`~/Library/Application Support/Claude/claude_d
 ```
 
 Redémarrer Claude Desktop ensuite. Les clés (`OPENROUTER_API_KEY`, `TAVILY_API_KEY`) sont lues depuis `backend/.env` (chemin absolu, indépendant du répertoire de travail utilisé par Claude Desktop pour lancer le process).
+
+## Lancer le frontend
+
+Interface de chat (streaming SSE), upload de notes, et affichage du raisonnement de l'agent en direct.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Ouvre `http://localhost:5173` (le backend doit tourner sur `http://localhost:8000`).
