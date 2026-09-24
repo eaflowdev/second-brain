@@ -35,25 +35,38 @@ def _chat_with_retry(messages, tools=None, model=None, attempts=CHAT_RETRY_ATTEM
     raise last_error
 
 
-def _plan(question: str) -> str:
-    tool_list = "\n".join(f"- {tool.name}: {tool.description}" for tool in TOOLS.values())
+def _plan(question: str, tools) -> str:
+    tool_list = "\n".join(f"- {tool.name}: {tool.description}" for tool in tools)
     prompt = PLANNING_PROMPT_TEMPLATE.format(question=question, tool_list=tool_list)
     message = _chat_with_retry([{"role": "user", "content": prompt}], model=settings.agent_model)
     return message.get("content") or ""
 
 
-def run_agent(question: str, max_turns: int = MAX_TURNS) -> dict:
+def run_agent(
+    question: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    tools=None,
+    max_turns: int = MAX_TURNS,
+) -> dict:
     """Plan, then ReAct loop: the model decides to call a tool (action), we run
     it and feed back the result (observation), until it answers directly, gets
-    stuck repeating itself, or max_turns is hit."""
-    plan = _plan(question)
+    stuck repeating itself, or max_turns is hit.
+
+    system_prompt/tools default to the general assistant, but can be overridden
+    to turn this same engine into a narrowly-scoped subagent with its own,
+    isolated conversation (a fresh `messages` list every call - nothing is
+    shared with the caller's context)."""
+    active_tools = list(TOOLS.values()) if tools is None else tools
+    tools_by_name = {tool.name: tool for tool in active_tools}
+    tool_schemas = [tool.to_schema() for tool in active_tools]
+
+    plan = _plan(question, active_tools)
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": question},
         {"role": "assistant", "content": f"Plan envisagé :\n{plan}"},
     ]
-    tool_schemas = [tool.to_schema() for tool in TOOLS.values()]
     steps = []
     seen_calls = set()
 
@@ -68,7 +81,7 @@ def run_agent(question: str, max_turns: int = MAX_TURNS) -> dict:
         for call in tool_calls:
             name = call["function"]["name"]
             args = json.loads(call["function"]["arguments"] or "{}")
-            tool = TOOLS.get(name)
+            tool = tools_by_name.get(name)
             call_signature = (name, json.dumps(args, sort_keys=True))
 
             if call_signature in seen_calls:
