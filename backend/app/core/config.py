@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     # Modèles gratuits à jour sur https://openrouter.ai/models?max_price=0
     openrouter_api_key: Optional[str] = None
     generation_model: str = "z-ai/glm-5.2:free"
+    # Tool calling natif : tous les modèles :free ne le supportent pas (vérifier
+    # "tools" dans supported_parameters via GET /api/v1/models avant de changer).
+    agent_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+
+    # Tavily: recherche web pensée pour les agents LLM. Clé gratuite sur https://tavily.com
+    tavily_api_key: Optional[str] = None
 
     class Config:
         env_file = ".env"
