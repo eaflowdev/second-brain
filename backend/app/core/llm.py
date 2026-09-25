@@ -53,6 +53,9 @@ def chat(
     if not choices:
         # Le pool de modèles :free renvoie parfois un 200 avec un corps d'erreur
         # (rate-limit upstream, provider indisponible...) plutôt qu'un code HTTP.
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            raise LLMError(f"Le modèle {payload['model']} est indisponible : {error['message']}")
         raise LLMError(f"Réponse OpenRouter inattendue (pas de 'choices') : {body}")
 
     message = choices[0]["message"]
