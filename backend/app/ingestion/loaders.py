@@ -1,8 +1,12 @@
+import re
 from pathlib import Path
 
 from pypdf import PdfReader
 
 from app.ingestion.models import Document
+
+# Private Use Area: icon glyphs embedded by PDF templates (e.g. ), not real text
+_PUA_GLYPHS = re.compile(r"[-]")
 
 
 def load_markdown(path: Path) -> Document:
@@ -12,7 +16,7 @@ def load_markdown(path: Path) -> Document:
 
 def load_pdf(path: Path) -> Document:
     reader = PdfReader(str(path))
-    pages = [page.extract_text() or "" for page in reader.pages]
+    pages = [_PUA_GLYPHS.sub("", page.extract_text() or "") for page in reader.pages]
     content = "\n\n".join(pages).strip()
     return Document.from_file(path, content, doc_type="pdf")
 

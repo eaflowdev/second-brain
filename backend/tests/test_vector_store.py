@@ -27,3 +27,30 @@ def test_save_and_reload_persists_records(tmp_path):
     reloaded = VectorStore(path)
 
     assert len(reloaded.search([0.1, 0.2], top_k=1)) == 1
+
+
+def test_hybrid_search_finds_exact_acronym_that_embedding_misses(tmp_path):
+    store = VectorStore(tmp_path / "store.json")
+    # the embedding alone prefers "a" (closest vector), but only "b" contains the term "CV"
+    store.add(_chunk("a", "notes sur la cuisine italienne"), [1.0, 0.0])
+    store.add(_chunk("b", "mon CV et mon parcours"), [0.0, 1.0])
+
+    results = store.search([1.0, 0.0], top_k=2, query_text="CV")
+
+    assert results[0]["id"] == "b"
+
+
+def test_hybrid_search_without_query_text_stays_semantic(tmp_path):
+    store = VectorStore(tmp_path / "store.json")
+    store.add(_chunk("a", "notes sur la cuisine"), [1.0, 0.0])
+    store.add(_chunk("b", "mon CV"), [0.0, 1.0])
+
+    results = store.search([1.0, 0.0], top_k=1)
+
+    assert results[0]["id"] == "a"
+
+
+def test_pdf_loader_strips_private_use_icon_glyphs():
+    from app.ingestion.loaders import _PUA_GLYPHS
+
+    assert _PUA_GLYPHS.sub("", "Expérience  Projets ") == "Expérience  Projets "

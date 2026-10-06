@@ -14,7 +14,7 @@ TAVILY_URL = "https://api.tavily.com/search"
 def _search_notes(query: str, top_k: int = 5) -> str:
     store = get_vector_store()
     query_vector = _embedder.embed([query])[0]
-    chunks = store.search(query_vector, top_k=top_k)
+    chunks = store.search(query_vector, top_k=top_k, query_text=query)
 
     if not chunks:
         return "Aucun passage pertinent trouvé dans les notes."

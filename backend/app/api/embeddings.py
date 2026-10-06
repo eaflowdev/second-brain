@@ -36,7 +36,7 @@ def index() -> dict:
 @router.get("/search")
 def search(q: str, top_k: int = 5) -> dict:
     query_vector = _embedder.embed([q])[0]
-    results = _store.search(query_vector, top_k=top_k)
+    results = _store.search(query_vector, top_k=top_k, query_text=q)
     return {
         "query": q,
         "results": [
