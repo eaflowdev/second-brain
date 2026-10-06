@@ -14,13 +14,25 @@ _store = get_vector_store()
 
 @router.post("/index")
 def index() -> dict:
-    """Re-scan notes_dir, chunk + embed everything, replace the vector store."""
+    """Re-scan notes_dir and embed only what changed: new or modified documents are
+    (re)embedded, unchanged ones are kept, and deleted ones are dropped from the store."""
     documents = scan_notes_dir(settings.notes_dir)
-    _store.clear()
+    indexed_hashes = _store.document_hashes()
+    current_ids = {document.id for document in documents}
+
+    removed = [doc_id for doc_id in indexed_hashes if doc_id not in current_ids]
+    for doc_id in removed:
+        _store.remove_document(doc_id)
 
     total_chunks = 0
+    reindexed = 0
     for document in documents:
+        if indexed_hashes.get(document.id) == document.content_hash:
+            continue
+
+        _store.remove_document(document.id)
         chunks = chunk_document(document)
+        reindexed += 1
         if not chunks:
             continue
 
@@ -30,7 +42,12 @@ def index() -> dict:
         total_chunks += len(chunks)
 
     _store.save()
-    return {"documents_indexed": len(documents), "chunks_indexed": total_chunks}
+    return {
+        "documents_indexed": len(documents),
+        "chunks_indexed": total_chunks,
+        "documents_reindexed": reindexed,
+        "documents_removed": len(removed),
+    }
 
 
 @router.get("/search")

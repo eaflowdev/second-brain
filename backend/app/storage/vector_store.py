@@ -65,6 +65,16 @@ class VectorStore:
     def clear(self) -> None:
         self._records = []
 
+    def document_hashes(self) -> dict[str, str]:
+        """content_hash of each indexed document, to detect what changed since last indexing."""
+        return {
+            record["document_id"]: record["metadata"].get("content_hash", "")
+            for record in self._records
+        }
+
+    def remove_document(self, document_id: str) -> None:
+        self._records = [r for r in self._records if r["document_id"] != document_id]
+
     def add(self, chunk: Chunk, vector: list[float]) -> None:
         self._records.append(
             {

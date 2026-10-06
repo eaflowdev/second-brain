@@ -54,3 +54,17 @@ def test_pdf_loader_strips_private_use_icon_glyphs():
     from app.ingestion.loaders import _PUA_GLYPHS
 
     assert _PUA_GLYPHS.sub("", "Expérience  Projets ") == "Expérience  Projets "
+
+
+def test_document_hashes_and_remove_document(tmp_path):
+    store = VectorStore(tmp_path / "store.json")
+    chunk_a = Chunk(id="a::0", document_id="a", index=0, text="x", metadata={"content_hash": "h1"})
+    chunk_b = Chunk(id="b::0", document_id="b", index=0, text="y", metadata={"content_hash": "h2"})
+    store.add(chunk_a, [1.0, 0.0])
+    store.add(chunk_b, [0.0, 1.0])
+
+    assert store.document_hashes() == {"a": "h1", "b": "h2"}
+
+    store.remove_document("a")
+
+    assert store.document_hashes() == {"b": "h2"}

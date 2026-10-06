@@ -19,6 +19,7 @@ def chunk_document(document: Document) -> list[Chunk]:
         "title": document.title,
         "source_path": document.source_path,
         "doc_type": document.doc_type,
+        "content_hash": document.content_hash,
     }
 
     return [
