@@ -16,6 +16,10 @@ class Skill:
     name: str
     description: str
     body: str
+    # Optional: when a skill is also run as a sub-agent, its persona and toolset live here
+    # too, so the .md file is the single source of truth (see subagents.py).
+    role: str = ""
+    tools: tuple[str, ...] = ()
 
 
 def _parse_skill_file(path: Path) -> Skill:
@@ -27,8 +31,15 @@ def _parse_skill_file(path: Path) -> Skill:
     frontmatter, body = match.groups()
     meta = dict(line.split(":", 1) for line in frontmatter.strip().splitlines())
     meta = {key.strip(): value.strip() for key, value in meta.items()}
+    tools = tuple(t.strip() for t in meta.get("tools", "").split(",") if t.strip())
 
-    return Skill(name=meta["name"], description=meta["description"], body=body.strip())
+    return Skill(
+        name=meta["name"],
+        description=meta["description"],
+        body=body.strip(),
+        role=meta.get("role", ""),
+        tools=tools,
+    )
 
 
 def list_skills() -> list[Skill]:

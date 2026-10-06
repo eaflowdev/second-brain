@@ -55,3 +55,13 @@ def test_run_orchestrator_uses_delegation_tools(monkeypatch):
     assert result["answer"] == "ok"
     assert captured["system_prompt"] == orchestrator.ORCHESTRATOR_SYSTEM_PROMPT
     assert captured["tools"] == orchestrator.DELEGATION_TOOLS
+
+
+def test_subagents_are_built_from_skill_files():
+    from app.agents import skill_loader
+
+    for agent in subagents.SUBAGENTS.values():
+        skill = skill_loader.get_skill(agent.name)
+        assert agent.description == skill.description
+        assert skill.role in agent.system_prompt
+        assert [t.name for t in agent.tools] == list(skill.tools)
