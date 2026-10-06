@@ -1,15 +1,17 @@
 import json
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.agents.loop import run_agent, run_agent_stream
 from app.agents.orchestrator import run_orchestrator
 from app.core.llm import LLMError
+from app.core.rate_limit import costly_endpoint_limit
 
-router = APIRouter(prefix="/agent", tags=["agent"])
+# Toutes les routes de ce router appellent un LLM : elles sont limitées par IP.
+router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(costly_endpoint_limit)])
 
 
 class Turn(BaseModel):

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # Tavily: recherche web pensée pour les agents LLM. Clé gratuite sur https://tavily.com
     tavily_api_key: Optional[str] = None
 
+    # Protection de l'API : taille max d'un upload, et nombre de requêtes coûteuses
+    # (agent, RAG, réindexation) par IP et par minute.
+    max_upload_bytes: int = 10 * 1024 * 1024
+    rate_limit_per_minute: int = 10
+
     class Config:
         # Chemin absolu : un serveur MCP est lancé par Claude Desktop avec un cwd
         # imprévisible, un chemin relatif ".env" ne serait pas trouvé de manière fiable.

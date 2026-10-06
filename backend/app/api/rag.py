@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.llm import LLMError
+from app.core.rate_limit import costly_endpoint_limit
 from app.rag.service import answer_question
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+router = APIRouter(prefix="/rag", tags=["rag"], dependencies=[Depends(costly_endpoint_limit)])
 
 
 class AskRequest(BaseModel):

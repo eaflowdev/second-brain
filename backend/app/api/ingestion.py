@@ -35,8 +35,16 @@ async def upload(file: UploadFile) -> dict:
     if suffix not in LOADERS:
         raise HTTPException(status_code=400, detail=f"Format non supporté : {suffix or '(aucun)'}")
 
+    # Lit au plus max+1 octets : suffit à détecter un dépassement sans charger un fichier géant en mémoire.
+    content = await file.read(settings.max_upload_bytes + 1)
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fichier trop volumineux (maximum {settings.max_upload_bytes // (1024 * 1024)} Mo)",
+        )
+
     destination = settings.notes_dir / filename
-    destination.write_bytes(await file.read())
+    destination.write_bytes(content)
 
     return {"filename": filename, "saved_to": str(destination)}
 

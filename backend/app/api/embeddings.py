@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.config import settings
+from app.core.rate_limit import costly_endpoint_limit
 from app.embeddings.embedder import Embedder
 from app.embeddings.models import chunk_document
 from app.ingestion.service import scan_notes_dir
@@ -12,7 +13,7 @@ _embedder = Embedder()
 _store = get_vector_store()
 
 
-@router.post("/index")
+@router.post("/index", dependencies=[Depends(costly_endpoint_limit)])
 def index() -> dict:
     """Re-scan notes_dir and embed only what changed: new or modified documents are
     (re)embedded, unchanged ones are kept, and deleted ones are dropped from the store."""
